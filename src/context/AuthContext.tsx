@@ -1,42 +1,39 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import { User, AuthState, LoginCredentials } from '../types/auth';
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { auth } from "../firebase";
+import { onAuthStateChanged, User, signOut } from "firebase/auth";
 
-interface AuthContextType extends AuthState {
-  login: (credentials: LoginCredentials) => Promise<void>;
-  logout: () => void;
+interface AuthContextType {
+  user: User | null;
+  isAuthenticated: boolean;
+  loading: boolean;
+  isVerified: boolean;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [authState, setAuthState] = useState<AuthState>({
-    user: null,
-    isAuthenticated: true,
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [isVerified, setIsVerified] = useState<boolean>(false);
 
-  const login = useCallback(async (credentials: LoginCredentials) => {
-    // In a real app, this would make an API call
-    // Simulated login for demo
-    const user: User = {
-      id: '1',
-      email: credentials.email,
-      name: 'John Doe',
-      company: 'Acme Inc',
-      role: 'admin',
-    };
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
+      setIsVerified(user?.emailVerified || false);
+      setLoading(false);
+    });
 
-    setAuthState({ user, isAuthenticated: true });
-
-
+    return () => unsubscribe();
   }, []);
 
-  const logout = useCallback(() => {
-    setAuthState({ user: null, isAuthenticated: false });
-  }, []);
+  const logout = async () => {
+    await signOut(auth);
+  };
 
   return (
-    <AuthContext.Provider value={{ ...authState, login, logout }}>
-      {children}
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, loading, logout, isVerified }}>
+      {!loading ? children : <div className="h-screen flex items-center justify-center">Loading...</div>}
     </AuthContext.Provider>
   );
 }
@@ -44,7 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }
